@@ -8,7 +8,7 @@ on:
         required: false
         type: string
   schedule:
-    - cron: '0 2 * * 0'
+  - cron: '0 2 * * 0'
 
 jobs:
   build:
@@ -17,50 +17,50 @@ jobs:
     outputs:
       python_version: ${{ steps.python_info.outputs.python_version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.release_tag || github.ref }}
-          fetch-depth: 0
-          submodules: recursive
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.release_tag || github.ref }}
+        fetch-depth: 0
+        submodules: recursive
 
-      - name: Set up Python
-        run: |
-          python3 -m venv /tmp/build-venv
-          . /tmp/build-venv/bin/activate
-          pip install --upgrade pip 'setuptools>=77,<81' wheel cython expandvars
+    - name: Set up Python
+      run: |
+        python3 -m venv /tmp/build-venv
+        . /tmp/build-venv/bin/activate
+        pip install --upgrade pip 'setuptools>=77,<81' wheel cython expandvars
 
-      - name: Build wheel
-        run: |
-          . /tmp/build-venv/bin/activate
-          pip wheel --no-deps --wheel-dir /tmp/wheels/ .
+    - name: Build wheel
+      run: |
+        . /tmp/build-venv/bin/activate
+        pip wheel --no-deps --wheel-dir /tmp/wheels/ .
 
-      - name: Verify platform tag
-        run: |
-          ls /tmp/wheels/*.whl
-          for whl in /tmp/wheels/*.whl; do
-            if echo "$whl" | grep -q "linux_riscv64\|manylinux.*riscv64"; then
-              echo "OK: $whl"
-            else
-              echo "FAIL: $whl does not have riscv64 platform tag"
-              exit 1
-            fi
-          done
+    - name: Verify platform tag
+      run: |
+        ls /tmp/wheels/*.whl
+        for whl in /tmp/wheels/*.whl; do
+          if echo "$whl" | grep -q "linux_riscv64\|manylinux.*riscv64"; then
+            echo "OK: $whl"
+          else
+            echo "FAIL: $whl does not have riscv64 platform tag"
+            exit 1
+          fi
+        done
 
-      - name: Capture Python version
-        id: python_info
-        run: echo "python_version=$(python3 --version 2>&1)" >> "$GITHUB_OUTPUT"
+    - name: Capture Python version
+      id: python_info
+      run: echo "python_version=$(python3 --version 2>&1)" >> "$GITHUB_OUTPUT"
 
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheel-riscv64
-          path: /tmp/wheels/*.whl
-          retention-days: 90
+    - name: Upload wheel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-riscv64
+        path: /tmp/wheels/*.whl
+        retention-days: 90
 
-      - name: Cleanup
-        if: always()
-        run: rm -rf /tmp/build-venv /tmp/wheels
+    - name: Cleanup
+      if: always()
+      run: rm -rf /tmp/build-venv /tmp/wheels
 
   release:
     needs: build
@@ -70,67 +70,67 @@ jobs:
       GH_REPO: ${{ github.repository }}
       PYTHON_VERSION: ${{ needs.build.outputs.python_version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Download wheel artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: wheel-riscv64
-          path: /tmp/wheels/
+    - name: Download wheel artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: wheel-riscv64
+        path: /tmp/wheels/
 
-      - name: Get wheel info
-        id: wheel_info
-        run: |
-          WHL=$(ls /tmp/wheels/*.whl | head -1)
-          BASENAME=$(basename "$WHL")
-          VERSION=$(echo "$BASENAME" | sed 's/^[^-]*-\([^-]*\)-.*/\1/')
-          echo "whl_path=$WHL" >> "$GITHUB_OUTPUT"
-          echo "whl_name=$BASENAME" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+    - name: Get wheel info
+      id: wheel_info
+      run: |
+        WHL=$(ls /tmp/wheels/*.whl | head -1)
+        BASENAME=$(basename "$WHL")
+        VERSION=$(echo "$BASENAME" | sed 's/^[^-]*-\([^-]*\)-.*/\1/')
+        echo "whl_path=$WHL" >> "$GITHUB_OUTPUT"
+        echo "whl_name=$BASENAME" >> "$GITHUB_OUTPUT"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Generate checksums
-        run: |
-          cd /tmp/wheels
-          sha256sum *.whl > SHA256SUMS
+    - name: Generate checksums
+      run: |
+        cd /tmp/wheels
+        sha256sum *.whl > SHA256SUMS
 
-      - name: Create or update release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WHL_NAME: ${{ steps.wheel_info.outputs.whl_name }}
-          VERSION: ${{ steps.wheel_info.outputs.version }}
-        run: |
-          TAG="riscv64-v${VERSION}"
-          TITLE="riscv64 wheel v${VERSION}"
-          gh release delete "$TAG" --yes 2>/dev/null || true
-          git tag -d "$TAG" 2>/dev/null || true
-          git push origin ":refs/tags/$TAG" 2>/dev/null || true
-          gh release create "$TAG" \
-            --title "$TITLE" \
-            --notes "Prebuilt riscv64 wheel for propcache.
+    - name: Create or update release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WHL_NAME: ${{ steps.wheel_info.outputs.whl_name }}
+        VERSION: ${{ steps.wheel_info.outputs.version }}
+      run: |
+        TAG="riscv64-v${VERSION}"
+        TITLE="riscv64 wheel v${VERSION}"
+        NOTES='Prebuilt riscv64 wheel for propcache.'
+        printf '%s\n\nBuilt on: BananaPi F3\nPython: %s\nWheel: %s\n' \
+          "$NOTES"
+          "${PYTHON_VERSION}" "${WHL_NAME}" > /tmp/release-notes.md
+        gh release delete "$TAG" --yes 2>/dev/null || true
+        git tag -d "$TAG" 2>/dev/null || true
+        git push origin ":refs/tags/$TAG" 2>/dev/null || true
+        gh release create "$TAG" \
+          --title "$TITLE" \
+          --notes-file /tmp/release-notes.md \
+          /tmp/wheels/*.whl \
+          /tmp/wheels/SHA256SUMS
 
-Built on: BananaPi F3 (SpacemiT K1, rv64imafdcv)
-Python: ${PYTHON_VERSION}
-Wheel: ${WHL_NAME}" \
-            /tmp/wheels/*.whl \
-            /tmp/wheels/SHA256SUMS
-
-      - name: Cleanup
-        if: always()
-        run: rm -rf /tmp/wheels
+    - name: Cleanup
+      if: always()
+      run: rm -rf /tmp/wheels /tmp/release-notes.md
 
   notify-index:
     needs: release
     runs-on: ubuntu-latest
     if: success()
     steps:
-      - name: Trigger index update
-        env:
-          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          gh api repos/gounthar/riscv64-python-wheels/dispatches \
-            -f event_type=fork-release-published \
-            -f "client_payload[repo]=${REPO}" \
-            -f "client_payload[tag]=${TAG}"
+    - name: Trigger index update
+      env:
+        GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        REPO: ${{ github.repository }}
+        TAG: ${{ github.ref_name }}
+      run: |
+        gh api repos/gounthar/riscv64-python-wheels/dispatches \
+          -f event_type=fork-release-published \
+          -f "client_payload[repo]=${REPO}" \
+          -f "client_payload[tag]=${TAG}"
